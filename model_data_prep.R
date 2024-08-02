@@ -32,11 +32,18 @@ df$Franchise <- as_factor(df$Franchise)
 df$Perspective <- as_factor(df$Perspective)
 df$`Main Category` <- as_factor(df$`Main Category`)
 
-#group low volume categoricals into other for relevant fields
-threshold <- 3
-counts <- df %>% count(Publisher)
-counts_joined <- df %>% left_join(counts, by = "Publisher")
-df$Publisher <- fct_collapse(counts_joined$Publisher, Other = unique(counts_joined$Publisher[counts_joined$n < threshold]))
+#function to group low volume categoricals into other for relevant fields
+group_factor <- function(df, col_name, threshold){
+  
+  counts <- df %>% count(.data[[col_name]]) #need to use this format for count() within a function - annoying!
+  counts_joined <- left_join(df, counts, by = col_name)
+  df[[col_name]] <<- fct_collapse(counts_joined[[col_name]], Other = unique(counts_joined[[col_name]][counts_joined$n < threshold]))
+}
+
+# list the fields to group and the separate threshold for each
+group_factor(df, "Publisher", 3)
+group_factor(df, "Developer", 3)
+group_factor(df, "Franchise", 3)
+group_factor(df, "Main Category", 3)
 
 
-summary(df)
