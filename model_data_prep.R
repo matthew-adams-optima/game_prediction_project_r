@@ -1,5 +1,6 @@
 library(tidyverse)
 library(ggplot2)
+library(caret)
 
 set.seed(43)
 
@@ -60,18 +61,37 @@ group_factor(df, "Franchise", 3)
 group_factor(df, "Main Category", 3)
 
 #test and train split
-smp_size <- floor(0.75 * nrow(df))
-train_ind <- sample(seq_len(nrow(df)), size = smp_size) #randomly select row indexes for training set
+train_ind <- as_vector(createDataPartition(df$Rating, p = 0.75))
+
 
 train <- df[train_ind, ] #select all rows with the training indexes
 test <- df[-train_ind, ] #select all rows not with the training indexes
 
-## first model, using basic reviewscore only for a benchmark ##
+## first model, linear using basic reviewscore only, for a benchmark ##
 
-model <- lm(Rating ~ Reviewscore, data = train)
-summary(model) # Adjusted R-squared 0.5234 on training data
+model1 <- lm(Rating ~ Reviewscore, data = train)
+summary(model1) # Adjusted R-squared 0.5221 on training data
 
-prediction <- predict(model, test)
+prediction <- predict(model1, test)
 
 predict_df <- add_column(test, prediction)
-cor(predict_df$Rating, predict_df$prediction)^2 # 0.5823 R-squared in test data
+cor(predict_df$Rating, predict_df$prediction)^2 # 0.5655 R-squared in test data
+
+## linear model using all fields ##
+
+model2 <- lm(Rating ~ Reviewscore 
+             + Publisher 
+             + Franchise
+             + `Launch Year`
+             + `Play Year`
+             + `Main Category`
+             + `DLC/ Major update played`
+             + `Perspective`
+             + `Played on`
+             , data = train)
+summary(model2)
+
+prediction <- predict(model2, test)
+
+predict_df <- add_column(test, prediction)
+cor(predict_df$Rating, predict_df$prediction)^2 # 0.4825 R-squared in test data
