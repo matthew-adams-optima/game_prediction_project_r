@@ -70,12 +70,11 @@ test <- df[-train_ind, ] #select all rows not with the training indexes
 ## first model, linear using basic reviewscore only, for a benchmark ##
 
 model1 <- lm(Rating ~ Reviewscore, data = train)
-summary(model1) # Adjusted R-squared 0.5221 on training data
+summary(model1) # Adjusted R-squared 0.5498 on training data
 
 prediction <- predict(model1, test)
-
-predict_df <- add_column(test, prediction)
-cor(predict_df$Rating, predict_df$prediction)^2 # 0.5655 R-squared in test data
+predict_df1 <- add_column(test, prediction)
+cor(predict_df1$Rating, predict_df1$prediction)^2 # 0.4781 R-squared in test data
 
 ## linear model using all fields ##
 
@@ -89,9 +88,15 @@ model2 <- lm(Rating ~ Reviewscore
              + `Perspective`
              + `Played on`
              , data = train)
-summary(model2)
+
+summary(model2) # Adjusted R-squared 0.6535 on training data
+
+# identify any in the test set that were missing from train
+missing_franchise <- setdiff(unique(test$Franchise), unique(train$Franchise))
+# recode the missing as Other
+test <- test %>% mutate(Franchise = fct_recode(Franchise, Other = missing_franchise[1]))
 
 prediction <- predict(model2, test)
-
-predict_df <- add_column(test, prediction)
-cor(predict_df$Rating, predict_df$prediction)^2 # 0.4825 R-squared in test data
+predict_df2 <- add_column(test, prediction)
+cor(predict_df2$Rating, predict_df2$prediction)^2 # 0.4526 R-squared in test data
+# overfitting going on?
