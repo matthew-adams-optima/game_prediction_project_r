@@ -1,6 +1,7 @@
 library(tidyverse)
 library(ggplot2)
 library(caret)
+library(randomForest)
 
 set.seed(43)
 
@@ -100,3 +101,21 @@ prediction <- predict(model2, test)
 predict_df2 <- add_column(test, prediction)
 cor(predict_df2$Rating, predict_df2$prediction)^2 # 0.4526 R-squared in test data
 # overfitting going on?
+
+## random forest model ##
+
+summary(train)
+
+model3 <- randomForest(Rating ~ Reviewscore 
+                       + Publisher 
+                       + Franchise
+                       + train$`Launch Year`
+                       + train$`Play Year`
+                       + train$`Main Category`
+                       + train$`DLC/ Major update played`
+                       + `Perspective`
+                       + train$`Played on`
+                       , data = train
+                       , ntree = 1000)
+  
+model3$rsq
