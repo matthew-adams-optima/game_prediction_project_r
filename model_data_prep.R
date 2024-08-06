@@ -29,6 +29,19 @@ df <- df %>% select(Game,
                     `Remaster Reviewscore`,
                     `Remaster Release Year`)
 
+# rename columns
+name_lkp <- c(Launch_Platforms = "Launch Platform(s)",
+              Played_On = "Played on",
+              Launch_Year = "Launch Year",
+              Play_Year = "Play Year",
+              DLC_Played = "DLC/ Major update played",
+              Category = "Main Category",
+              Descriptors = "Extra Descriptors",
+              Remaster_Reviewscore = "Remaster Reviewscore",
+              Remaster_Year = "Remaster Release Year")
+
+df <- rename(df, all_of(name_lkp))
+
 ## some quick exploratory plotting and analysis ##
 
 #bubble plot
@@ -40,12 +53,12 @@ ggplot(plot_data, aes(x = Reviewscore, y = Rating, size = n)) +
 cor(df$Rating, df$Reviewscore) # 0.730121
 
 #convert the categoricals to factor
-df$`DLC/ Major update played` <- as_factor(df$`DLC/ Major update played`)
+df$DLC_Played <- as_factor(df$DLC_Played)
 df$Publisher <- as_factor(df$Publisher)
 df$Developer <- as_factor(df$Developer)
 df$Franchise <- as_factor(df$Franchise)
 df$Perspective <- as_factor(df$Perspective)
-df$`Main Category` <- as_factor(df$`Main Category`)
+df$Category <- as_factor(df$Category)
 
 #function to group low volume categoricals into other for relevant fields
 group_factor <- function(df, col_name, threshold){
@@ -59,7 +72,7 @@ group_factor <- function(df, col_name, threshold){
 group_factor(df, "Publisher", 3)
 group_factor(df, "Developer", 3)
 group_factor(df, "Franchise", 3)
-group_factor(df, "Main Category", 3)
+group_factor(df, "Category", 3)
 
 #test and train split
 train_ind <- as_vector(createDataPartition(df$Rating, p = 0.75))
@@ -82,12 +95,12 @@ cor(predict_df1$Rating, predict_df1$prediction)^2 # 0.4781 R-squared in test dat
 model2 <- lm(Rating ~ Reviewscore 
              + Publisher 
              + Franchise
-             + `Launch Year`
-             + `Play Year`
-             + `Main Category`
-             + `DLC/ Major update played`
-             + `Perspective`
-             + `Played on`
+             + Launch_Year
+             + Play_Year
+             + Category
+             + DLC_Played
+             + Perspective
+             + Played_On
              , data = train)
 
 summary(model2) # Adjusted R-squared 0.6535 on training data
@@ -97,6 +110,10 @@ missing_franchise <- setdiff(unique(test$Franchise), unique(train$Franchise))
 # recode the missing as Other
 test <- test %>% mutate(Franchise = fct_recode(Franchise, Other = missing_franchise[1]))
 
+# ensure factor types are matching
+levels(test$Franchise) <- levels(train$Franchise)
+# need to apply the above to all factor variables for deployment to prevent any potential errors
+
 prediction <- predict(model2, test)
 predict_df2 <- add_column(test, prediction)
 cor(predict_df2$Rating, predict_df2$prediction)^2 # 0.4526 R-squared in test data
@@ -104,18 +121,24 @@ cor(predict_df2$Rating, predict_df2$prediction)^2 # 0.4526 R-squared in test dat
 
 ## random forest model ##
 
-summary(train)
-
+numtrees <- 1000
 model3 <- randomForest(Rating ~ Reviewscore 
                        + Publisher 
                        + Franchise
-                       + train$`Launch Year`
-                       + train$`Play Year`
-                       + train$`Main Category`
-                       + train$`DLC/ Major update played`
-                       + `Perspective`
-                       + train$`Played on`
+                       + Launch_Year
+                       + Play_Year
+                       + Category
+                       + DLC_Played
+                       + Perspective
+                       + Played_On
                        , data = train
-                       , ntree = 1000)
+                       , ntree = numtrees)
   
-model3$rsq
+# train set r-squared
+mean(model3$rsq) #0.4609 average of trees
+
+prediction <- predict(model3, test)
+predict_df3 <- add_column(test, prediction)
+cor(predict_df3$Rating, predict_df3$prediction)^2 # 0.4546 R-squared in test data
+
+## ridge regression model ##
