@@ -2,6 +2,8 @@ library(tidyverse)
 library(ggplot2)
 library(caret)
 library(randomForest)
+library(glmnet)
+library(gbm)
 
 set.seed(43)
 
@@ -53,6 +55,7 @@ ggplot(plot_data, aes(x = Reviewscore, y = Rating, size = n)) +
 cor(df$Rating, df$Reviewscore) # 0.730121
 
 #convert the categoricals to factor
+df$Played_On <- as_factor(df$Played_On)
 df$DLC_Played <- as_factor(df$DLC_Played)
 df$Publisher <- as_factor(df$Publisher)
 df$Developer <- as_factor(df$Developer)
@@ -142,3 +145,73 @@ predict_df3 <- add_column(test, prediction)
 cor(predict_df3$Rating, predict_df3$prediction)^2 # 0.4546 R-squared in test data
 
 ## ridge regression model ##
+
+train_data <- train[c("Rating",
+                      "Reviewscore", 
+                      "Publisher", 
+                      "Franchise", 
+                      "Launch_Year",
+                      "Play_Year",
+                      "Category",
+                      "DLC_Played",
+                      "Perspective",
+                      "Played_On")]
+
+test_data <- test[c("Rating",
+                      "Reviewscore", 
+                      "Publisher", 
+                      "Franchise", 
+                      "Launch_Year",
+                      "Play_Year",
+                      "Category",
+                      "DLC_Played",
+                      "Perspective",
+                      "Played_On")]
+
+x_matrices <- glmnet::makeX(train = train_data[, !names(train_data) == "Rating"],
+                            test = test_data[, !names(test_data) == "Rating"])
+
+###Calculate best lambda 
+cv.out <- cv.glmnet(x_matrices$x, train_data$Rating,
+                    alpha = 0, nlambda = 100,
+                    lambda.min.ratio = 0.0001)
+
+best_lambda = cv.out$lambda.min
+
+model <- glmnet(x_matrices$x, train_data$Rating, alpha = 0, lamda = best_lambda)
+
+# training R-squared
+y_predicted <- predict(model, s = best_lambda, newx = x_matrices$x)
+
+tss <- sum((train$Rating - mean(train$Rating))^2)
+rss <- sum((train$Rating - y_predicted)^2)
+1 - rss/tss # 0.7373 training R-squared
+
+#test R-squared
+y_predicted <- predict(model, s = best_lambda, newx = x_matrices$xtest)
+
+tss <- sum((test$Rating - mean(test$Rating))^2)
+rss <- sum((test$Rating - y_predicted)^2)
+1 - rss/tss # 0.4725 training R-squared
+# strong overfitting here
+
+## Gradient boosted regressor ##
+
+model = gbm(Rating ~ Reviewscore 
+   + Publisher 
+   + Franchise
+   + Launch_Year
+   + Play_Year
+   + Category
+   + DLC_Played
+   + Perspective
+   + Played_On
+   , data = train
+)
+  
+  summary(model2) # Adjusted R-squared 0.6527 on training data
+  
+  prediction <- predict(model, test)
+  predict_df <- add_column(test, prediction)
+  cor(predict_df$Rating, predict_df$prediction)^2 # 0.4798 R-squared in test data
+  
