@@ -220,4 +220,5 @@ cor(predict_df$Rating, predict_df$prediction)^2 # 0.6955 R-squared in train data
 prediction <- predict(model5, test)
 predict_df <- add_column(test, prediction)
 cor(predict_df$Rating, predict_df$prediction)^2 # 0.4798 R-squared in test data
-  
+
+save(model5, file="model.Rdata")
