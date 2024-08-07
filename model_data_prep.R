@@ -238,3 +238,4 @@ final_model = gbm(Rating ~ Reviewscore
 )
 
 saveRDS(final_model, file="model.rds")
+saveRDS(df, file="data.rds")
