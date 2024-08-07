@@ -178,26 +178,26 @@ cv.out <- cv.glmnet(x_matrices$x, train_data$Rating,
 
 best_lambda = cv.out$lambda.min
 
-model <- glmnet(x_matrices$x, train_data$Rating, alpha = 0, lamda = best_lambda)
+model4 <- glmnet(x_matrices$x, train_data$Rating, alpha = 0, lamda = best_lambda)
 
 # training R-squared
-y_predicted <- predict(model, s = best_lambda, newx = x_matrices$x)
+y_predicted <- predict(model4, s = best_lambda, newx = x_matrices$x)
 
 tss <- sum((train$Rating - mean(train$Rating))^2)
 rss <- sum((train$Rating - y_predicted)^2)
 1 - rss/tss # 0.7373 training R-squared
 
 #test R-squared
-y_predicted <- predict(model, s = best_lambda, newx = x_matrices$xtest)
+y_predicted <- predict(model4, s = best_lambda, newx = x_matrices$xtest)
 
 tss <- sum((test$Rating - mean(test$Rating))^2)
 rss <- sum((test$Rating - y_predicted)^2)
-1 - rss/tss # 0.4725 training R-squared
+1 - rss/tss # 0.4725 test R-squared
 # strong overfitting here
 
 ## Gradient boosted regressor ##
 
-model = gbm(Rating ~ Reviewscore 
+model5 = gbm(Rating ~ Reviewscore
    + Publisher 
    + Franchise
    + Launch_Year
@@ -207,11 +207,17 @@ model = gbm(Rating ~ Reviewscore
    + Perspective
    + Played_On
    , data = train
+   , distribution = "gaussian"
+   , n.trees = 100
 )
   
-  summary(model2) # Adjusted R-squared 0.6527 on training data
+summary(model5) # relative importances
+
+prediction <- predict(model5, train)
+predict_df <- add_column(train, prediction)
+cor(predict_df$Rating, predict_df$prediction)^2 # 0.6955 R-squared in train data
   
-  prediction <- predict(model, test)
-  predict_df <- add_column(test, prediction)
-  cor(predict_df$Rating, predict_df$prediction)^2 # 0.4798 R-squared in test data
+prediction <- predict(model5, test)
+predict_df <- add_column(test, prediction)
+cor(predict_df$Rating, predict_df$prediction)^2 # 0.4798 R-squared in test data
   
