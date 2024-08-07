@@ -221,4 +221,20 @@ prediction <- predict(model5, test)
 predict_df <- add_column(test, prediction)
 cor(predict_df$Rating, predict_df$prediction)^2 # 0.4798 R-squared in test data
 
-saveRDS(model5, file="model.rds")
+## Re-train using full sample for best model ##
+
+final_model = gbm(Rating ~ Reviewscore
+                  + Publisher 
+                  + Franchise
+                  + Launch_Year
+                  + Play_Year
+                  + Category
+                  + DLC_Played
+                  + Perspective
+                  + Played_On
+                  , data = df
+                  , distribution = "gaussian"
+                  , n.trees = 100
+)
+
+saveRDS(final_model, file="model.rds")
