@@ -10,8 +10,9 @@ ui <- fluidPage(
   sidebarLayout(
     sidebarPanel(
       titlePanel("Input New Game"),
-      textInput("ng", "Game Name:"),
-      sliderInput("rs", "Reviewscore:", min = 0, max = 100, value = 75)
+      textInput("ng", "Game Name:", value = "New Game"),
+      sliderInput("rs", "Reviewscore:", min = 0, max = 100, value = 75),
+      
     )
     ,
     mainPanel(
@@ -23,12 +24,15 @@ ui <- fluidPage(
 
 server <- function(input, output) {
   
+  prediction <- reactive(input$rs)
+  
   output$plot <- renderPlot({
-    plot(df$Rating, df$Reviewscore)
+    plot(df$Reviewscore, df$Rating, pch = 20, col = 'grey', alpha = 0.7)
+    points(input$rs, prediction(), col = 'red', pch = 4, cex = 1.5)
   }, res = 96)
   
   output$prediction <- renderText({
-    paste("Expected Rating for ", input$ng, " is ", input$rs)
+    paste("Expected Rating for ", input$ng, " is ", prediction())
   })
 }
 
