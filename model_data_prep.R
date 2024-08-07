@@ -221,4 +221,4 @@ prediction <- predict(model5, test)
 predict_df <- add_column(test, prediction)
 cor(predict_df$Rating, predict_df$prediction)^2 # 0.4798 R-squared in test data
 
-save(model5, file="model.Rdata")
+saveRDS(model5, file="model.rds")
