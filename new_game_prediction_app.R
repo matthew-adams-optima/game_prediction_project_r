@@ -10,7 +10,7 @@ other_replace <- function(df, col_name, input) {
   
   if (input == "") {
     "Other"
-  } else if (max(str_detect(df[[col_name]], input)) == 1){
+  } else if (max(df[[col_name]] == input)){
     input
   } else {
     "Other"
@@ -47,7 +47,8 @@ ui <- fluidPage(
     ,
     mainPanel(
       textOutput("prediction"),
-      plotOutput("plot")
+      plotOutput("plot"),
+      plotOutput("band")
     )
   )
 )
@@ -74,14 +75,25 @@ server <- function(input, output) {
     
   })
   
+  band_data <- reactive({
+    
+    df %>% filter(abs(Reviewscore - input$rs) <= 3) %>% select(Rating)
+    
+  })
+  
   output$plot <- renderPlot({
     plot(df$Reviewscore, df$Rating, pch = 20, col = 'grey')
-    points(input$rs, prediction(), col = 'red', pch = 4, cex = 1.5)
+    points(input$rs, prediction(), pch = 4, col = 'red', cex = 1.5)
   }, res = 96)
   
   output$prediction <- renderText({
     paste("Expected Rating for ", input$ng, " is ", prediction())
   })
+  
+  output$band <- renderPlot({
+    plot(band_data()$Rating, integer(nrow(band_data())), pch = 20, col = 'grey')
+    points(prediction(), 0, pch = 4, col = 'red', cex = 1.5)
+  }, res = 96)
 }
 
 shinyApp(ui = ui, server = server)
