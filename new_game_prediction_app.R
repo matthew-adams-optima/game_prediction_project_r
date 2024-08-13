@@ -1,11 +1,19 @@
+# Shiny App covering my game rating prediction model #
+
+# import necessary packages
 library(tidyverse)
 library(shiny)
 library(ggplot2)
 library(mlr)
 
+## Preparation before running the Shiny App ##
 set.seed(43)
 model <- readRDS("model.rds")
 df <- readRDS("data.rds")
+
+# Extract model importances for analysis
+importances <- summary(model)
+names(importances) <- c("Variable", "Importance")
 
 # define function to replace an input with Other if it has no match in the data
 other_replace <- function(df, col_name, input) {
@@ -19,8 +27,10 @@ other_replace <- function(df, col_name, input) {
   }
 }
 
+# linear fit between rating and reviewscore for charts
 lm_fit <- lm(Rating ~ Reviewscore, data = df)
 
+# a dataframe containing only the input data for use in prediction page
 cols <- df[c("Reviewscore", 
              "Publisher", 
              "Franchise", 
@@ -31,38 +41,68 @@ cols <- df[c("Reviewscore",
              "Perspective",
              "Played_On")]
 
+## UI ##
+
 ui <- fluidPage(
-  titlePanel("Predicting my Game Ratings!"),
-  sidebarLayout(
-    sidebarPanel(
-      h3("Input New Game"),
-      textInput("ng", "Game Name:", value = "New Game"),
-      sliderInput("rs", "Reviewscore:", min = 0, max = 100, value = 75),
-      textInput("pub", "Publisher:"),
-      textInput("fran", "Franchise:"),
-      numericInput("ly", "Launch Year:", value = format(Sys.Date(), "%Y")),
-      numericInput("py", "Play Year:", value = format(Sys.Date(), "%Y")),
-      selectInput("cat", "Main Category:", choices = unique(df$Category)),
-      selectInput("persp", "Perspective:", choices = unique(df$Perspective)),
-      selectInput("po", "Played On:", choices = unique(df$Played_On)),
-      selectInput("dlc", "DLC:", choices = unique(df$DLC_Played)),
-      actionButton("predict", "Compute Prediction!")
-    )
-    ,
-    mainPanel(
-      textOutput("prediction"),
-      div(
-        style = "position:relative",
-        plotOutput("plot", 
-                   hover = hoverOpts(id = "plot_hover", delay = 100, delayType = "debounce")),
-        uiOutput("hover_info")
-      ),
-      plotOutput("band", height = "100px")
+  tabsetPanel(
+    # Page One - Model Analysis
+    tabPanel("Model Analysis",
+      titlePanel("Analysing the Trained Model"),
+      sidebarLayout(
+        sidebarPanel(
+          
+        ),
+        mainPanel(
+          plotOutput("model_summary")
+        )
+      )
+    ),
+    # Page Two - Make Predictions
+    tabPanel("Prediction Tool",
+      titlePanel("Predicting my Game Ratings!"),
+      sidebarLayout(
+        sidebarPanel(
+          h3("Input New Game"),
+          textInput("ng", "Game Name:", value = "New Game"),
+          sliderInput("rs", "Reviewscore:", min = 0, max = 100, value = 75),
+          textInput("pub", "Publisher:"),
+          textInput("fran", "Franchise:"),
+          numericInput("ly", "Launch Year:", value = format(Sys.Date(), "%Y")),
+          numericInput("py", "Play Year:", value = format(Sys.Date(), "%Y")),
+          selectInput("cat", "Main Category:", choices = unique(df$Category)),
+          selectInput("persp", "Perspective:", choices = unique(df$Perspective)),
+          selectInput("po", "Played On:", choices = unique(df$Played_On)),
+          selectInput("dlc", "DLC:", choices = unique(df$DLC_Played)),
+          actionButton("predict", "Compute Prediction!")
+        ),
+        mainPanel(
+          textOutput("prediction"),
+          div(
+            style = "position:relative",
+            plotOutput("plot", 
+                       hover = hoverOpts(id = "plot_hover", delay = 100, delayType = "debounce")),
+            uiOutput("hover_info")
+          ),
+          plotOutput("band", height = "100px")
+        )
+      )
     )
   )
 )
 
+## Server ##
+
 server <- function(input, output) {
+  
+  # Page One Relevant Server Functions
+  
+  output$model_summary <- renderPlot({
+    ggplot(importances, aes(reorder(Variable, Importance), Importance)) +
+      geom_col() +
+      coord_flip()
+  }, res = 96)
+  
+  # Page Two Relevant Server Functions
   
   prediction <- eventReactive(input$predict, {
     
