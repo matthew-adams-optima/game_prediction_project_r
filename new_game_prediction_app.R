@@ -1,7 +1,9 @@
 library(tidyverse)
 library(shiny)
 library(ggplot2)
+library(mlr)
 
+set.seed(43)
 model <- readRDS("model.rds")
 df <- readRDS("data.rds")
 
@@ -16,6 +18,8 @@ other_replace <- function(df, col_name, input) {
     "Other"
   }
 }
+
+lm_fit <- lm(Rating ~ Reviewscore, data = df)
 
 cols <- df[c("Reviewscore", 
              "Publisher", 
@@ -41,8 +45,8 @@ ui <- fluidPage(
       selectInput("cat", "Main Category:", choices = unique(df$Category)),
       selectInput("persp", "Perspective:", choices = unique(df$Perspective)),
       selectInput("po", "Played On:", choices = unique(df$Played_On)),
-      selectInput("dlc", "DLC:", choices = unique(df$DLC_Played))
-      
+      selectInput("dlc", "DLC:", choices = unique(df$DLC_Played)),
+      actionButton("predict", "Compute Prediction!")
     )
     ,
     mainPanel(
@@ -60,7 +64,7 @@ ui <- fluidPage(
 
 server <- function(input, output) {
   
-  prediction <- reactive({
+  prediction <- eventReactive(input$predict, {
     
     new_game <- as_tibble(cbind(input$rs, 
                                 other_replace(df, "Publisher", input$pub),
@@ -80,17 +84,26 @@ server <- function(input, output) {
     
   })
   
-  band_data <- reactive({
+  band_data <- eventReactive(input$predict, {
     
     df %>% filter(abs(Reviewscore - input$rs) <= 3) %>% select(Rating)
     
   })
   
+  review_input <- eventReactive(input$predict, {
+    input$rs
+  })
+  
+  name_input <- eventReactive(input$predict, {
+    input$ng
+  })
+  
   output$plot <- renderPlot({
     ggplot(df, aes(x = Reviewscore, y = Rating)) +
-      geom_point(color = 'grey', shape = 20) +
-      annotate("point", x = input$rs, y = prediction(), color = 'red', shape = 4, size = 3) +
-      labs(title = paste("Rating vs Reviewscore With Highlighted", input$ng, "Prediction"),
+      geom_count(color = 'grey', shape = 20) +
+      geom_abline(slope = coef(lm_fit)[["Reviewscore"]], intercept = coef(lm_fit)[["(Intercept)"]], col = 'brown', linetype = "dashed", alpha = 0.5) +
+      annotate("point", x = review_input(), y = prediction(), color = 'red', shape = 4, size = 3) +
+    labs(title = paste("Rating vs Reviewscore With Highlighted", name_input(), "Prediction"),
            x = "Review Score",
            y = "Rating")
       
@@ -132,7 +145,7 @@ server <- function(input, output) {
   
   output$band <- renderPlot({
     ggplot(NULL) +
-      geom_point(aes(x = band_data()$Rating, y = integer(nrow(band_data()))), color = 'grey', shape = 20) +
+      geom_count(aes(x = band_data()$Rating, y = integer(nrow(band_data()))), color = 'grey', shape = 20) +
       annotate("point", x = prediction(), y = 0, color = 'red', shape = 4, size = 3) +
       labs(title = paste('Rating for games with similar Review Scores to', input$ng),
            x = "Rating",
@@ -140,7 +153,8 @@ server <- function(input, output) {
       theme(axis.text.y = element_blank(),
             axis.ticks.y = element_blank(),
             panel.grid.major.y = element_blank(),
-            panel.grid.minor = element_blank())
+            panel.grid.minor = element_blank(),
+            legend.position = "none")
       
   }, res = 96)
 }
