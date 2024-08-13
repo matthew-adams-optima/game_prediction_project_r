@@ -209,6 +209,7 @@ model5 = gbm(Rating ~ Reviewscore
    , data = train
    , distribution = "gaussian"
    , n.trees = 100
+   , cv.folds = 5
 )
   
 summary(model5) # relative importances
@@ -235,6 +236,7 @@ final_model = gbm(Rating ~ Reviewscore
                   , data = df
                   , distribution = "gaussian"
                   , n.trees = 100
+                  , cv.folds = 5
 )
 
 saveRDS(final_model, file="model.rds")
