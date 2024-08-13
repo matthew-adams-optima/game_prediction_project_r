@@ -47,8 +47,9 @@ ui <- fluidPage(
     ,
     mainPanel(
       textOutput("prediction"),
-      plotOutput("plot"),
-      plotOutput("band")
+      plotOutput("plot", hover = hoverOpts(id = "plot_hover")),
+      verbatimTextOutput("hover_info"),
+      plotOutput("band", height = "100px")
     )
   )
 )
@@ -82,17 +83,44 @@ server <- function(input, output) {
   })
   
   output$plot <- renderPlot({
-    plot(df$Reviewscore, df$Rating, pch = 20, col = 'grey')
-    points(input$rs, prediction(), pch = 4, col = 'red', cex = 1.5)
+    ggplot(df, aes(x = Reviewscore, y = Rating)) +
+      geom_point(color = 'grey', shape = 20) +
+      annotate("point", x = input$rs, y = prediction(), color = 'red', shape = 4, size = 3) +
+      labs(title = paste("Rating vs Reviewscore With Highlighted", input$ng, "Prediction"),
+           x = "Review Score",
+           y = "Rating")
+      
   }, res = 96)
+  
+  output$hover_info <- renderPrint({
+    
+    if(!is.null(input$plot_hover)){
+      hover=input$plot_hover
+      dist=sqrt((hover$x-df$Reviewscore)^2+(hover$y-df$Rating)^2)
+      cat("Game:")
+      if(min(dist) < 3)
+        df$Game[which.min(dist)]
+    }
+    
+    
+  })
   
   output$prediction <- renderText({
     paste("Expected Rating for ", input$ng, " is ", prediction())
   })
   
   output$band <- renderPlot({
-    plot(band_data()$Rating, integer(nrow(band_data())), pch = 20, col = 'grey')
-    points(prediction(), 0, pch = 4, col = 'red', cex = 1.5)
+    ggplot(NULL) +
+      geom_point(aes(x = band_data()$Rating, y = integer(nrow(band_data()))), color = 'grey', shape = 20) +
+      annotate("point", x = prediction(), y = 0, color = 'red', shape = 4, size = 3) +
+      labs(title = paste('Rating for games with similar Review Scores to', input$ng),
+           x = "Rating",
+           y = "") +
+      theme(axis.text.y = element_blank(),
+            axis.ticks.y = element_blank(),
+            panel.grid.major.y = element_blank(),
+            panel.grid.minor = element_blank())
+      
   }, res = 96)
 }
 
