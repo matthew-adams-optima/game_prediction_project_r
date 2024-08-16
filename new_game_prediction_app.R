@@ -5,6 +5,7 @@ library(tidyverse)
 library(shiny)
 library(ggplot2)
 library(mlr)
+library(gbm)
 
 ## Preparation before running the Shiny App ##
 set.seed(43)
