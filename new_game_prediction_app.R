@@ -21,7 +21,7 @@ other_replace <- function(df, col_name, input) {
   
   if (input == "") {
     "Other"
-  } else if (max(df[[col_name]] == input)){
+  } else if (max(df[[col_name]] == input)) {
     input
   } else {
     "Other"
@@ -85,6 +85,20 @@ ui <- fluidPage(
             uiOutput("hover_info")
           ),
           plotOutput("band", height = "100px")
+        )
+      )
+    ),
+    # Page Three - Recommender tool
+    tabPanel("Recommender Tool",
+      titlePanel("Predict on Multiple New Games at Once For a Recommendation!"),
+      sidebarLayout(
+        sidebarPanel(
+          fileInput("upload", "Upload a CSV:", accept = ".csv")
+        ),
+        mainPanel(
+          htmlOutput("recommend"),
+          htmlOutput("table_header"),
+          tableOutput("head")
         )
       )
     )
@@ -198,6 +212,73 @@ server <- function(input, output) {
             legend.position = "none")
       
   }, res = 96)
+  
+  # Page Three Relevant Server Functions
+  
+  data <- reactive({
+    # only run once the user has uploaded a file
+    req(input$upload)
+    
+    # error if the file uploaded is not csv
+    ext <- tools::file_ext(input$upload$name)
+    
+    switch(ext,
+           csv = vroom::vroom(input$upload$datapath, delim = ","),
+           validate("Invalid file; Please upload a .csv file")
+    )
+  })
+  
+  predictions <- reactive({
+    
+    req(input$upload)
+    
+    new_games <- as_tibble(data())
+    
+    new_games <- new_games %>%
+      mutate(Publisher = ifelse(Publisher %in% unique(df$Publisher), Publisher, "Other"),
+             Franchise = ifelse(Franchise %in% unique(df$Franchise), Franchise, "Other"))
+    
+    cols <- cols %>% mutate(Game_Name = "Dummy", .before = Reviewscore)
+    
+    model_input <- rbind(cols, new_games)
+    
+    predicted_ratings <- round(predict(model, tail(model_input, nrow(new_games))), 0)
+    
+    new_games <- new_games %>% mutate(Prediction = predicted_ratings, .after = Game_Name)
+    
+    arrange(new_games, desc(Prediction), desc(Reviewscore))
+    
+  })
+  
+  recommended_game <- reactive({
+    
+    validate(need(input$upload, "Upload a CSV file to get recommendations!"))
+    
+    top_game <- predictions() %>% select(Game_Name, Prediction) %>% slice(which.max(Prediction))
+    
+    paste0("The recommended game to play is "
+           , "<b>", top_game$Game_Name, "</b>"
+           , ", with an expected score of "
+           , "<b>", top_game$Prediction, "</b>"
+           , "!")
+    
+  })
+  
+  output$recommend <- renderText({
+    
+    paste0("<font size= \"5\">", recommended_game(), "</font>")
+  })
+  
+  output$table_header <- renderText({
+    
+    req(input$upload)
+    paste0("<font size= \"4\">", "Full list of games with predicted scores:", "</font>")
+  })
+  
+  output$head <- renderTable({
+    print(predictions())
+  })
+  
 }
 
 shinyApp(ui = ui, server = server)
