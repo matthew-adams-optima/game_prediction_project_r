@@ -6,6 +6,7 @@ library(shiny)
 library(ggplot2)
 library(mlr)
 library(gbm)
+library(pdp)
 
 ## Preparation before running the Shiny App ##
 set.seed(43)
@@ -42,27 +43,41 @@ cols <- df[c("Reviewscore",
              "Perspective",
              "Played_On")]
 
+predicts <- as_tibble(df$Rating - predict(model, df))
+
 ## UI ##
 
 ui <- fluidPage(
   tabsetPanel(
+    
     # Page One - Model Analysis
     tabPanel("Model Analysis",
       titlePanel("Analysing the Trained Model"),
       sidebarLayout(
         sidebarPanel(
-          
+          # Side bar inputs in order of appearance
+          selectInput("pdvar", "Partial Dependence Variable:", choices = colnames(cols))
         ),
         mainPanel(
-          plotOutput("model_summary")
+          fluidRow(
+            column(6,
+            plotOutput("model_summary") # feature importances chart
+            ),
+            column(6,
+            plotOutput("freq_dist") # partial dependence chart
+            )
+          ),
+          plotOutput("partial_dependence") # model error distribution
         )
       )
     ),
+    
     # Page Two - Make Predictions
     tabPanel("Prediction Tool",
       titlePanel("Predicting my Game Ratings!"),
       sidebarLayout(
         sidebarPanel(
+          # Side bar inputs in order of appearance
           h3("Input New Game"),
           textInput("ng", "Game Name:", value = "New Game"),
           sliderInput("rs", "Reviewscore:", min = 0, max = 100, value = 75),
@@ -77,17 +92,19 @@ ui <- fluidPage(
           actionButton("predict", "Compute Prediction!")
         ),
         mainPanel(
-          textOutput("prediction"),
-          div(
+          # Main body content
+          htmlOutput("prediction"), #the top line printing the prediction
+          div( #main scatter plot with interactive hover element
             style = "position:relative",
             plotOutput("plot", 
                        hover = hoverOpts(id = "plot_hover", delay = 100, delayType = "debounce")),
             uiOutput("hover_info")
           ),
-          plotOutput("band", height = "100px")
+          plotOutput("band", height = "100px") #band of outcomes plot
         )
       )
     ),
+    
     # Page Three - Recommender tool
     tabPanel("Recommender Tool",
       titlePanel("Predict on Multiple New Games at Once For a Recommendation!"),
@@ -111,11 +128,52 @@ server <- function(input, output) {
   
   # Page One Relevant Server Functions
   
+  # Calculate partial dependence in the model for input feature
+  partial_dependence_category <- reactive({
+    partial(model, pred.var = input$pdvar, n.trees = model$n.trees)
+  })
+  
+  # Define text element theme parameters for different categorical features
+  label_angle <- reactive({
+    if (input$pdvar %in% c("Reviewscore", "Play_Year", "Launch_Year", "DLC_Played")) {
+      c(0, 0, 0.5)
+    }
+    else {
+      c(90, 0.5, 1)
+    }
+  })
+  
+  # Define plot output for feature importances - column chart
   output$model_summary <- renderPlot({
     ggplot(importances, aes(reorder(Variable, Importance), Importance)) +
       geom_col() +
-      coord_flip()
+      coord_flip() +
+      labs(title = "Feature Importances",
+           x = "Feature")
   }, res = 96)
+  
+  # Define plot output for partial dependence - interactive chart
+  output$partial_dependence <- renderPlot({
+    
+    autoplot(partial_dependence_category()) +
+      labs(title = paste("Partial Dependence Plot For", input$pdvar),
+           y = "Expected Rating") +
+      theme(axis.text.x = element_text(size=12, angle=label_angle()[1], vjust=label_angle()[2], hjust=label_angle()[3]),
+            axis.text.y = element_text(size=12),
+            axis.title = element_text(size=13),
+            title = element_text(size=15))
+    
+  })
+  
+  # Define plot output for model error distribution - histogram
+  output$freq_dist <- renderPlot({
+    
+    ggplot(predicts, aes(x = value)) +
+      geom_histogram() +
+      labs(title = "Model Error Distribution",
+           x = "Actual - Prediction")
+    
+  })
   
   # Page Two Relevant Server Functions
   
@@ -151,6 +209,15 @@ server <- function(input, output) {
   
   name_input <- eventReactive(input$predict, {
     input$ng
+  })
+  
+  output$prediction <- renderText({
+    
+    validate(need(input$predict, "Click the button at the bottom to make your first prediction!"))
+    
+    paste("<font size= \"5\">",
+      "Expected Rating for ", input$ng, " is ", round(prediction(),0),
+      "</font>")
   })
   
   output$plot <- renderPlot({
@@ -193,14 +260,9 @@ server <- function(input, output) {
     )
   })
   
-  
-  output$prediction <- renderText({
-    paste("Expected Rating for ", input$ng, " is ", prediction())
-  })
-  
   output$band <- renderPlot({
     ggplot(NULL) +
-      geom_count(aes(x = band_data()$Rating, y = integer(nrow(band_data()))), color = 'grey', shape = 20) +
+      geom_violin(aes(x = band_data()$Rating, y = integer(nrow(band_data()))), color = 'grey') +
       annotate("point", x = prediction(), y = 0, color = 'red', shape = 4, size = 3) +
       labs(title = paste('Rating for games with similar Review Scores to', input$ng),
            x = "Rating",
