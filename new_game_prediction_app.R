@@ -7,6 +7,7 @@ library(ggplot2)
 library(mlr)
 library(gbm)
 library(pdp)
+library(shinythemes)
 
 ## Preparation before running the Shiny App ##
 set.seed(43)
@@ -47,34 +48,48 @@ predicts <- as_tibble(df$Rating - predict(model, df))
 
 ## UI ##
 
-ui <- fluidPage(
+ui <- fluidPage(theme = shinytheme("flatly"),
+      tags$head(
+      tags$style(HTML("
+      .shiny-output-error-validation {
+        color: #ff0000;
+        font-weight: bold;
+        }"))
+      ),
   tabsetPanel(
     
     # Page One - Model Analysis
     tabPanel("Model Analysis",
-      titlePanel("Analysing the Trained Model"),
+      titlePanel( h1("Analysing the Trained Model", align = "center")),
       sidebarLayout(
         sidebarPanel(
           # Side bar inputs in order of appearance
-          selectInput("pdvar", "Partial Dependence Variable:", choices = colnames(cols))
+          sliderInput("binwidth", "Histogram bin width:", min = 0.5, max = 5, step = 0.1, value = 1.5),
+          selectInput("pdvar", "Partial Dependence Variable:", choices = colnames(cols)),
+          , width = 3
         ),
         mainPanel(
           fluidRow(
             column(6,
-            plotOutput("model_summary") # feature importances chart
-            ),
+            plotOutput("model_summary"), # feature importances chart
+            style = 'padding-left:0px; padding-right:10px; padding-top:5px; padding-bottom:5px'),
             column(6,
-            plotOutput("freq_dist") # partial dependence chart
+            plotOutput("freq_dist"), # partial dependence chart
+            style = 'padding-left:0px; padding-right:0px; padding-top:5px; padding-bottom:5px'
             )
           ),
-          plotOutput("partial_dependence") # model error distribution
+          fluidRow(
+            column(12,
+          plotOutput("partial_dependence"), # model error distribution
+          style = 'padding-left:60px; padding-right:0px; padding-top:5px; padding-bottom:5px')
+          )
         )
       )
     ),
     
     # Page Two - Make Predictions
     tabPanel("Prediction Tool",
-      titlePanel("Predicting my Game Ratings!"),
+      titlePanel(h1("Predicting my Game Ratings!", align = "center")),
       sidebarLayout(
         sidebarPanel(
           # Side bar inputs in order of appearance
@@ -82,7 +97,7 @@ ui <- fluidPage(
           textInput("ng", "Game Name:", value = "New Game"),
           sliderInput("rs", "Reviewscore:", min = 0, max = 100, value = 75),
           textInput("pub", "Publisher:"),
-          textInput("fran", "Franchise:"),
+          textInput("fran", "Franchise:"),s
           numericInput("ly", "Launch Year:", value = format(Sys.Date(), "%Y")),
           numericInput("py", "Play Year:", value = format(Sys.Date(), "%Y")),
           selectInput("cat", "Main Category:", choices = unique(df$Category)),
@@ -90,10 +105,16 @@ ui <- fluidPage(
           selectInput("po", "Played On:", choices = unique(df$Played_On)),
           selectInput("dlc", "DLC:", choices = unique(df$DLC_Played)),
           actionButton("predict", "Compute Prediction!")
-        ),
+          , width = 3
+          ),
         mainPanel(
           # Main body content
-          htmlOutput("prediction"), #the top line printing the prediction
+          fluidRow(
+            column(12,
+          htmlOutput("prediction"),
+          style = 'padding-left:20px; padding-right:0px; padding-top:5px; padding-bottom:15px'
+          )
+          ), #the top line printing the prediction
           div( #main scatter plot with interactive hover element
             style = "position:relative",
             plotOutput("plot", 
@@ -107,10 +128,11 @@ ui <- fluidPage(
     
     # Page Three - Recommender tool
     tabPanel("Recommender Tool",
-      titlePanel("Predict on Multiple New Games at Once For a Recommendation!"),
+      titlePanel(h1("Predict on Multiple New Games at Once For a Recommendation!", align = "center")),
       sidebarLayout(
         sidebarPanel(
           fileInput("upload", "Upload a CSV:", accept = ".csv")
+          , width = 3
         ),
         mainPanel(
           htmlOutput("recommend"),
@@ -125,6 +147,7 @@ ui <- fluidPage(
 ## Server ##
 
 server <- function(input, output) {
+  thematic::thematic_shiny() # set default plot themes as UI theme
   
   # Page One Relevant Server Functions
   
@@ -139,7 +162,7 @@ server <- function(input, output) {
       c(0, 0, 0.5)
     }
     else {
-      c(90, 0.5, 1)
+      c(70, 1, 1.1)
     }
   })
   
@@ -169,7 +192,7 @@ server <- function(input, output) {
   output$freq_dist <- renderPlot({
     
     ggplot(predicts, aes(x = value)) +
-      geom_histogram() +
+      geom_histogram(binwidth = input$binwidth) +
       labs(title = "Model Error Distribution",
            x = "Actual - Prediction")
     
