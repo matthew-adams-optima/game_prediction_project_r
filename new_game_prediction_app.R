@@ -101,7 +101,7 @@ ui <- fluidPage(theme = shinytheme("flatly"),
           actionButton("predict", "Predict New Game!", style = "margin-bottom:15px;"),
           div(style = "margin-bottom:0px; padding-bottom:0px;", textInput("ng", "Game Name:", value = "New Game")), #need to use div to style inputs
           sliderInput("rs", "Reviewscore:", min = 0, max = 100, value = 75),
-          textInput("pub", "Publisher:"),
+          div(style = "margin-bottom:0px; padding-bottom:0px;", textInput("pub", "Publisher:")),
           textInput("fran", "Franchise:"),
           numericInput("ly", "Launch Year:", value = format(Sys.Date(), "%Y")),
           numericInput("py", "Play Year:", value = format(Sys.Date(), "%Y")),
