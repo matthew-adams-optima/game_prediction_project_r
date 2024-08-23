@@ -7,6 +7,7 @@ library(ggplot2)
 library(mlr)
 library(gbm)
 library(pdp)
+library(shinythemes)
 
 ## Preparation before running the Shiny App ##
 set.seed(43)
@@ -43,42 +44,61 @@ cols <- df[c("Reviewscore",
              "Perspective",
              "Played_On")]
 
+# calculate difference between rating and prediction for training set
 predicts <- as_tibble(df$Rating - predict(model, df))
+
+# define standard ggplot theme
+sd_theme <- theme(axis.text = element_text(size=10),
+                  plot.title = element_text(size=16, hjust = 0.5))
 
 ## UI ##
 
-ui <- fluidPage(
+ui <- fluidPage(theme = shinytheme("flatly"),
+      tags$head(
+      tags$style(HTML("
+      .shiny-output-error-validation {
+        color: #008000;
+        font-weight: bold;
+        }"))
+      ),
   tabsetPanel(
     
     # Page One - Model Analysis
     tabPanel("Model Analysis",
-      titlePanel("Analysing the Trained Model"),
+      titlePanel( h1("Analysing the Trained Model", align = "center", style = 'padding-bottom:30px')),
       sidebarLayout(
         sidebarPanel(
           # Side bar inputs in order of appearance
-          selectInput("pdvar", "Partial Dependence Variable:", choices = colnames(cols))
+          sliderInput("binwidth", "Histogram bin width:", min = 0.5, max = 5, step = 0.1, value = 1.5),
+          selectInput("pdvar", "Partial Dependence Variable:", choices = colnames(cols)),
+          , width = 3
         ),
         mainPanel(
           fluidRow(
             column(6,
-            plotOutput("model_summary") # feature importances chart
-            ),
+            plotOutput("model_summary"), # feature importances chart
+            style = 'padding-left:0px; padding-right:10px; padding-top:5px; padding-bottom:5px'),
             column(6,
-            plotOutput("freq_dist") # partial dependence chart
+            plotOutput("freq_dist"), # partial dependence chart
+            style = 'padding-left:0px; padding-right:0px; padding-top:5px; padding-bottom:5px'
             )
           ),
-          plotOutput("partial_dependence") # model error distribution
+          fluidRow(
+            column(12,
+          plotOutput("partial_dependence"), # model error distribution
+          style = 'padding-left:60px; padding-right:0px; padding-top:5px; padding-bottom:5px')
+          )
         )
       )
     ),
     
     # Page Two - Make Predictions
     tabPanel("Prediction Tool",
-      titlePanel("Predicting my Game Ratings!"),
+      titlePanel(h1("Interactive Prediction Tool", align = "center", style = 'padding-bottom:30px')),
       sidebarLayout(
         sidebarPanel(
           # Side bar inputs in order of appearance
-          h3("Input New Game"),
+          actionButton("predict", "Predict New Game!", style = "margin-bottom:15px;"),
           textInput("ng", "Game Name:", value = "New Game"),
           sliderInput("rs", "Reviewscore:", min = 0, max = 100, value = 75),
           textInput("pub", "Publisher:"),
@@ -89,11 +109,12 @@ ui <- fluidPage(
           selectInput("persp", "Perspective:", choices = unique(df$Perspective)),
           selectInput("po", "Played On:", choices = unique(df$Played_On)),
           selectInput("dlc", "DLC:", choices = unique(df$DLC_Played)),
-          actionButton("predict", "Compute Prediction!")
-        ),
+          , width = 3
+          ),
         mainPanel(
           # Main body content
-          htmlOutput("prediction"), #the top line printing the prediction
+          htmlOutput("prediction", #the top line printing the prediction
+          style = 'padding-left:20px; padding-right:0px; padding-top:5px; padding-bottom:15px'),
           div( #main scatter plot with interactive hover element
             style = "position:relative",
             plotOutput("plot", 
@@ -107,14 +128,15 @@ ui <- fluidPage(
     
     # Page Three - Recommender tool
     tabPanel("Recommender Tool",
-      titlePanel("Predict on Multiple New Games at Once For a Recommendation!"),
+      titlePanel(h1("Multiple Game Recommender Tool", align = "center", style = 'padding-bottom:30px')),
       sidebarLayout(
         sidebarPanel(
           fileInput("upload", "Upload a CSV:", accept = ".csv")
+          , width = 3
         ),
         mainPanel(
-          htmlOutput("recommend"),
-          htmlOutput("table_header"),
+          htmlOutput("recommend", style = 'padding-bottom:30px'),
+          htmlOutput("table_header", align = "center"),
           tableOutput("head")
         )
       )
@@ -125,6 +147,7 @@ ui <- fluidPage(
 ## Server ##
 
 server <- function(input, output) {
+  thematic::thematic_shiny() # set default plot themes as UI theme
   
   # Page One Relevant Server Functions
   
@@ -139,7 +162,7 @@ server <- function(input, output) {
       c(0, 0, 0.5)
     }
     else {
-      c(90, 0.5, 1)
+      c(70, 1, 1.1)
     }
   })
   
@@ -149,7 +172,20 @@ server <- function(input, output) {
       geom_col() +
       coord_flip() +
       labs(title = "Feature Importances",
-           x = "Feature")
+           x = "Feature") +
+      sd_theme
+  }, res = 96)
+  
+  # Define plot output for model error distribution - histogram
+  output$freq_dist <- renderPlot({
+    
+    ggplot(predicts, aes(x = value)) +
+      geom_histogram(binwidth = input$binwidth, color = "black") +
+      labs(title = "Model Error Distribution",
+           x = "Actual - Prediction",
+           y = "Count") +
+      sd_theme
+    
   }, res = 96)
   
   # Define plot output for partial dependence - interactive chart
@@ -158,22 +194,10 @@ server <- function(input, output) {
     autoplot(partial_dependence_category()) +
       labs(title = paste("Partial Dependence Plot For", input$pdvar),
            y = "Expected Rating") +
-      theme(axis.text.x = element_text(size=12, angle=label_angle()[1], vjust=label_angle()[2], hjust=label_angle()[3]),
-            axis.text.y = element_text(size=12),
-            axis.title = element_text(size=13),
-            title = element_text(size=15))
+      theme(axis.text.x = element_text(angle=label_angle()[1], vjust=label_angle()[2], hjust=label_angle()[3])) +
+      sd_theme
     
-  })
-  
-  # Define plot output for model error distribution - histogram
-  output$freq_dist <- renderPlot({
-    
-    ggplot(predicts, aes(x = value)) +
-      geom_histogram() +
-      labs(title = "Model Error Distribution",
-           x = "Actual - Prediction")
-    
-  })
+  }, res = 96)
   
   # Page Two Relevant Server Functions
   
@@ -213,10 +237,10 @@ server <- function(input, output) {
   
   output$prediction <- renderText({
     
-    validate(need(input$predict, "Click the button at the bottom to make your first prediction!"))
+    validate(need(input$predict, "Click the button at the top of the sidebar to make your first prediction!"))
     
-    paste("<font size= \"5\">",
-      "Expected Rating for ", input$ng, " is ", round(prediction(),0),
+    paste0("<font size= \"5\">",
+      "Expected Rating for ", input$ng, " is ", "<b>", round(prediction(),0), "</b>", "!",
       "</font>")
   })
   
@@ -225,9 +249,10 @@ server <- function(input, output) {
       geom_count(color = 'grey', shape = 20) +
       geom_abline(slope = coef(lm_fit)[["Reviewscore"]], intercept = coef(lm_fit)[["(Intercept)"]], col = 'brown', linetype = "dashed", alpha = 0.5) +
       annotate("point", x = review_input(), y = prediction(), color = 'red', shape = 4, size = 3) +
-    labs(title = paste("Rating vs Reviewscore With Highlighted", name_input(), "Prediction"),
+      labs(title = paste("Rating vs Reviewscore With Highlighted", name_input(), "Prediction"),
            x = "Review Score",
-           y = "Rating")
+           y = "Rating") +
+      sd_theme
       
   }, res = 96)
   
@@ -271,7 +296,8 @@ server <- function(input, output) {
             axis.ticks.y = element_blank(),
             panel.grid.major.y = element_blank(),
             panel.grid.minor = element_blank(),
-            legend.position = "none")
+            legend.position = "none") +
+      sd_theme
       
   }, res = 96)
   
@@ -308,6 +334,9 @@ server <- function(input, output) {
     
     new_games <- new_games %>% mutate(Prediction = predicted_ratings, .after = Game_Name)
     
+    new_games <- new_games %>% mutate_at(c("Prediction", "Reviewscore", "Launch_Year", "Play_Year"),
+                                             as.integer)
+    
     arrange(new_games, desc(Prediction), desc(Reviewscore))
     
   })
@@ -339,7 +368,7 @@ server <- function(input, output) {
   
   output$head <- renderTable({
     print(predictions())
-  })
+  }, hover = TRUE, bordered = TRUE)
   
 }
 
