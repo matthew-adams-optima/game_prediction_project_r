@@ -93,17 +93,20 @@ prediction <- predict(model1, test)
 predict_df1 <- add_column(test, prediction)
 cor(predict_df1$Rating, predict_df1$prediction)^2 # 0.4781 R-squared in test data
 
+# base model formula
+fmla <- formula(Rating ~ Reviewscore
++ Publisher 
++ Franchise
++ Launch_Year
++ Play_Year
++ Category
++ DLC_Played
++ Perspective
++ Played_On)
+
 ## linear model using all fields ##
 
-model2 <- lm(Rating ~ Reviewscore 
-             + Publisher 
-             + Franchise
-             + Launch_Year
-             + Play_Year
-             + Category
-             + DLC_Played
-             + Perspective
-             + Played_On
+model2 <- lm(fmla
              , data = train)
 
 summary(model2) # Adjusted R-squared 0.6535 on training data
@@ -125,15 +128,7 @@ cor(predict_df2$Rating, predict_df2$prediction)^2 # 0.4526 R-squared in test dat
 ## random forest model ##
 
 numtrees <- 1000
-model3 <- randomForest(Rating ~ Reviewscore 
-                       + Publisher 
-                       + Franchise
-                       + Launch_Year
-                       + Play_Year
-                       + Category
-                       + DLC_Played
-                       + Perspective
-                       + Played_On
+model3 <- randomForest(fmla
                        , data = train
                        , ntree = numtrees)
   
@@ -143,6 +138,8 @@ mean(model3$rsq) #0.4609 average of trees
 prediction <- predict(model3, test)
 predict_df3 <- add_column(test, prediction)
 cor(predict_df3$Rating, predict_df3$prediction)^2 # 0.4546 R-squared in test data
+residuals <- predict_df3$Rating - predict_df3$prediction
+sqrt(mean(residuals^2)) # rss
 
 ## ridge regression model ##
 
@@ -197,15 +194,8 @@ rss <- sum((test$Rating - y_predicted)^2)
 
 ## Gradient boosted regressor ##
 
-model5 = gbm(Rating ~ Reviewscore
-   + Publisher 
-   + Franchise
-   + Launch_Year
-   + Play_Year
-   + Category
-   + DLC_Played
-   + Perspective
-   + Played_On
+set.seed(2)
+model5 = gbm(fmla
    , data = train
    , distribution = "gaussian"
    , n.trees = 100
@@ -215,29 +205,81 @@ model5 = gbm(Rating ~ Reviewscore
 summary(model5) # relative importances
 
 prediction <- predict(model5, train)
-predict_df <- add_column(train, prediction)
-cor(predict_df$Rating, predict_df$prediction)^2 # 0.6955 R-squared in train data
+predict_train <- add_column(train, prediction)
+cor(predict_train$Rating, predict_train$prediction)^2 # 0.6955 R-squared in train data
   
 prediction <- predict(model5, test)
-predict_df <- add_column(test, prediction)
-cor(predict_df$Rating, predict_df$prediction)^2 # 0.4798 R-squared in test data
+predict_test <- add_column(test, prediction)
+cor(predict_test$Rating, predict_test$prediction)^2 # 0.4922 R-squared in test data
+
+residuals <- predict_test$Rating - predict_test$prediction
+sqrt(mean(residuals^2)) # rss
+
+gbm.perf(model5)
+
+# gbm probably best, let's reduce overfitting and maximise test performance #
+
+## optimise number of trees ##
+gbm.perf(model5, method = "cv") # about 60 is best
+
+## optimise interaction depth ##
+
+set.seed(2)
+min_depth <- 1
+max_depth <- 3
+plot(NULL, xlim = c(min_depth, max_depth), ylim = c(0, 1), xlab = "depth", ylab = "test rss")
+for (i in min_depth:max_depth) {
+  model = gbm(fmla
+               , data = train
+               , distribution = "gaussian"
+               , n.trees = 60
+               , interaction.depth = i
+  )
+  prediction <- predict(model, test)
+  predict_test <- add_column(test, prediction)
+  rsq <- cor(predict_test$Rating, predict_test$prediction)^2
+  print(rsq)
+  points(i, rsq)
+  
+}
+
+## 1 is best!
+
+## Improve model formula by considering interaction terms ##
+
+## Try model again and get scores with the improvements ##
+
+set.seed(2)
+model = gbm(fmla
+             , data = train
+             , distribution = "gaussian"
+             , n.trees = 60
+)
+
+summary(model) # relative importances
+
+prediction <- predict(model, train)
+predict_train <- add_column(train, prediction)
+cor(predict_train$Rating, predict_train$prediction)^2 # 0.6955 R-squared in train data
+
+prediction <- predict(model, test)
+predict_test <- add_column(test, prediction)
+cor(predict_test$Rating, predict_test$prediction)^2 # 0.4922 R-squared in test data
+
+residuals <- predict_test$Rating - predict_test$prediction
+sqrt(mean(residuals^2)) # rss
 
 ## Re-train using full sample for best model ##
 
-final_model = gbm(Rating ~ Reviewscore
-                  + Publisher 
-                  + Franchise
-                  + Launch_Year
-                  + Play_Year
-                  + Category
-                  + DLC_Played
-                  + Perspective
-                  + Played_On
+final_model = gbm(fmla
                   , data = df
                   , distribution = "gaussian"
-                  , n.trees = 100
-                  , cv.folds = 5
+                  , n.trees = 60
 )
+
+prediction <- predict(final_model, df)
+predict <- add_column(df, prediction)
+cor(predict$Rating, predict$prediction)^2 # 0.6573 R-squared in final model (full train data)
 
 saveRDS(final_model, file="model.rds")
 saveRDS(df, file="data.rds")
