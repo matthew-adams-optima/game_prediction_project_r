@@ -299,7 +299,8 @@ for (i in min_depth:max_depth) {
   model = gbm(fmla
                , data = train
                , distribution = "gaussian"
-               , n.trees = 1
+               , n.trees = 6500
+               , shrinkage = 0.001
                , interaction.depth = i
   )
   prediction <- predict(model, test)
@@ -395,13 +396,53 @@ sqrt(mean(residuals^2)) # mean square error
 
 # Perform feature selection only keeping best features #
 
-fmla <- formula(Rating ~ Reviewscore
-                + Franchise
-                + DLC_Played
-                + Perspective)
+features <- c("Reviewscore", 
+              "Publisher", 
+              "Franchise", 
+              "Launch_Year",
+              "Play_Year",
+              "Category",
+              "DLC_Played",
+              "Perspective",
+              "Played_On")
+
+fmla_vec <- c()
+rsq_vec <- c()
 
 set.seed(2)
-model = gbm(fmla
+for (m in 1:length(features)) {
+  
+  combos <- combn(features, m, simplify = FALSE)
+  num_combos <- length(combos)
+  
+  for (i in 1:num_combos) {
+    
+    rhs <- paste0(combos[[i]], collapse = " + ")
+    fmla <- formula(paste0("Rating ~ ", rhs))
+    model <- gbm(fmla
+                , data = train
+                , distribution = "gaussian"
+                , n.trees = 6500
+                , shrinkage = 0.001
+                , n.minobsinnode = 4
+                )
+    prediction <- predict(model, test)
+    predict_test <- add_column(test, prediction)
+    rsq <- cor(predict_test$Rating, predict_test$prediction)^2
+    
+    fmla_vec <- c(fmla_vec, fmla)
+    rsq_vec <- c(rsq_vec, rsq)
+    
+  }
+}
+
+best_fmla <- fmla_vec[which.max(rsq_vec)]
+print(formula(best_fmla)) #Rating ~ Reviewscore + Franchise + DLC_Played
+
+#best_fmla <- formula(Rating ~ Reviewscore + Franchise + DLC_Played)
+
+set.seed(2)
+model = gbm(best_fmla
             , data = train
             , distribution = "gaussian"
             , n.trees = 6500
