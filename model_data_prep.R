@@ -4,6 +4,7 @@ library(caret)
 library(randomForest)
 library(glmnet)
 library(gbm)
+library(plotmo)
 
 set.seed(43)
 
@@ -254,7 +255,9 @@ best_lambda = cv.out$lambda.min
 
 model <- glmnet(x_matrices$x, train_data$Rating, alpha = 0.5, lamda = best_lambda)
 
-plot(model, xvar = "lambda", label = TRUE)
+model$beta["Reviewscore",]
+
+plot_glmnet(model, xvar = "lambda", label = TRUE)
 
 ## Gradient boosted regressor ##
 
@@ -296,7 +299,7 @@ for (i in min_depth:max_depth) {
   model = gbm(fmla
                , data = train
                , distribution = "gaussian"
-               , n.trees = 60
+               , n.trees = 1
                , interaction.depth = i
   )
   prediction <- predict(model, test)
@@ -314,12 +317,12 @@ for (i in min_depth:max_depth) {
 set.seed(2)
 min_learn <- 1
 max_learn <- 100
-plot(NULL, xlim = c(min_learn/1000, max_learn/1000), ylim = c(0, 1), xlab = "depth", ylab = "test rsq")
+plot(NULL, xlim = c(min_learn/1000, max_learn/1000), ylim = c(0, 1), xlab = "shrinkage", ylab = "test rsq")
 for (i in min_learn:max_learn) {
   model = gbm(fmla
               , data = train
               , distribution = "gaussian"
-              , n.trees = 60
+              , n.trees = 1000
               , shrinkage = i/1000
   )
   prediction <- predict(model, test)
@@ -330,7 +333,17 @@ for (i in min_learn:max_learn) {
   
 }
 
-# About 0.07 seems optimal with 100 trees or 0.08 with 60 trees
+# About 0.08 seems optimal with 60 trees or 0.004 with 1000 trees
+
+#what is optimal ntrees for 0.001 shrinkage?
+model <- gbm(fmla
+            , data = train
+            , distribution = "gaussian"
+            , n.trees = 10000
+            , shrinkage = 0.001
+            , cv.folds = 5
+)
+gbm.perf(model, method = "cv") # 6576!
 
 ## Adjust minobsinnode ##
 
@@ -342,8 +355,8 @@ for (i in min_obs:max_obs) {
   model = gbm(fmla
               , data = train
               , distribution = "gaussian"
-              , n.trees = 60
-              , shrinkage = 0.08
+              , n.trees = 6500
+              , shrinkage = 0.001
               , n.minobsinnode = i
   )
   prediction <- predict(model, test)
@@ -354,7 +367,7 @@ for (i in min_obs:max_obs) {
   
 }
 
-# steady downnward slope, okay with low number for regression so leave blank!
+# steady downnward slope, with 4 being the peak, makes sense for this low volume data!
 
 ## Try model again and get scores with the improvements ##
 
@@ -362,8 +375,9 @@ set.seed(2)
 model = gbm(fmla
             , data = train
             , distribution = "gaussian"
-            , n.trees = 60
-            , shrinkage = 0.08
+            , n.trees = 6500
+            , shrinkage = 0.001
+            , n.minobsinnode = 4
 )
 
 summary(model) # relative importances
@@ -379,9 +393,34 @@ cor(predict_test$Rating, predict_test$prediction)^2 # 0.4922 R-squared in test d
 residuals <- predict_test$Rating - predict_test$prediction
 sqrt(mean(residuals^2)) # mean square error
 
-## Lasso model still best so let's try optimising that ##
+# Perform feature selection only keeping best features #
 
+fmla <- formula(Rating ~ Reviewscore
+                + Franchise
+                + DLC_Played
+                + Perspective)
 
+set.seed(2)
+model = gbm(fmla
+            , data = train
+            , distribution = "gaussian"
+            , n.trees = 6500
+            , shrinkage = 0.001
+            , n.minobsinnode = 4
+)
+
+summary(model) # relative importances
+
+prediction <- predict(model, train)
+predict_train <- add_column(train, prediction)
+cor(predict_train$Rating, predict_train$prediction)^2 # 0.6955 R-squared in train data
+
+prediction <- predict(model, test)
+predict_test <- add_column(test, prediction)
+cor(predict_test$Rating, predict_test$prediction)^2 # 0.4922 R-squared in test data
+
+residuals <- predict_test$Rating - predict_test$prediction
+sqrt(mean(residuals^2)) # mean square error
 
 ## Re-train using full sample for best model ##
 
