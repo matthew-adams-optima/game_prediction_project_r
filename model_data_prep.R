@@ -255,6 +255,14 @@ best_lambda = cv.out$lambda.min
 
 model <- glmnet(x_matrices$x, train_data$Rating, alpha = 0.5, lamda = best_lambda)
 
+#test R-squared
+y_predicted <- predict(model, s = best_lambda, newx = x_matrices$xtest)
+
+tss <- sum((test$Rating - mean(test$Rating))^2)
+rss <- sum((test$Rating - y_predicted)^2)
+1 - rss/tss # 0.5125 test R-squared
+sqrt(mean((test$Rating - y_predicted)^2)) # 8.552 mean square error
+
 model$beta["Reviewscore",]
 
 plot_glmnet(model, xvar = "lambda", label = TRUE)
@@ -406,6 +414,7 @@ features <- c("Reviewscore",
               "Perspective",
               "Played_On")
 
+# feature selection by exhaustion, trying every possible model and picking best #
 fmla_vec <- c()
 rsq_vec <- c()
 
@@ -436,8 +445,8 @@ for (m in 1:length(features)) {
   }
 }
 
-best_fmla <- fmla_vec[which.max(rsq_vec)]
-print(formula(best_fmla)) #Rating ~ Reviewscore + Franchise + DLC_Played
+best_fmla <- fmla_vec[[which.max(rsq_vec)]] # find formula which produced best test rsq
+print(best_fmla) #Rating ~ Reviewscore + Franchise + DLC_Played
 
 #best_fmla <- formula(Rating ~ Reviewscore + Franchise + DLC_Played)
 
@@ -448,6 +457,21 @@ model = gbm(best_fmla
             , n.trees = 6500
             , shrinkage = 0.001
             , n.minobsinnode = 4
+            , cv.folds = 5
+)
+
+summary(model) # relative importances
+
+# what is new best ntrees?
+gbm.perf(model, method = "cv") # About 5000!
+
+set.seed(2)
+model = gbm(best_fmla
+            , data = train
+            , distribution = "gaussian"
+            , n.trees = 5000
+            , shrinkage = 0.001
+            , n.minobsinnode = 3 #3 now best with best_fmla
 )
 
 summary(model) # relative importances
@@ -465,16 +489,19 @@ sqrt(mean(residuals^2)) # mean square error
 
 ## Re-train using full sample for best model ##
 
-final_model = gbm(fmla
+## Best model is final gbm with the best_fmla ##
+
+final_model = gbm(best_fmla
                   , data = df
                   , distribution = "gaussian"
-                  , n.trees = 60
-                  , shrinkage = 0.08
+                  , n.trees = 5000
+                  , shrinkage = 0.001
+                  , n.minobsinnode = 3
 )
 
 prediction <- predict(final_model, df)
 predict <- add_column(df, prediction)
-cor(predict$Rating, predict$prediction)^2 # 0.6573 R-squared in final model (full train data)
+cor(predict$Rating, predict$prediction)^2 # 0.6098 R-squared in final model (full train data)
 
 saveRDS(final_model, file="model.rds")
 saveRDS(df, file="data.rds")
