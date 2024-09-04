@@ -252,8 +252,11 @@ cv.out <- cv.glmnet(x_matrices$x, train_data$Rating,
                     lambda.min.ratio = 0.0001)
 
 best_lambda = cv.out$lambda.min
+best_lambda_index <- cv.out$index['min',]
 
 model <- glmnet(x_matrices$x, train_data$Rating, alpha = 0.5, lamda = best_lambda)
+
+model$beta[, best_lambda_index] #coefficients used in final model
 
 #test R-squared
 y_predicted <- predict(model, s = best_lambda, newx = x_matrices$xtest)
