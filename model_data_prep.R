@@ -244,7 +244,7 @@ for (i in 0:alphas) {
   points(i/alphas, rsq)
 }
 # 0 = ridge regression is the worst but then pretty equal from 0.2 or higher. Go with 0.5
-
+# alpha between 0 and 1 is elastic net regression
 # convert to using a glmnet regular model once settled #
 
 cv.out <- cv.glmnet(x_matrices$x, train_data$Rating,
