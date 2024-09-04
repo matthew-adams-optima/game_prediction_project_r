@@ -5,6 +5,7 @@ library(randomForest)
 library(glmnet)
 library(gbm)
 library(plotmo)
+library(gdata)
 
 set.seed(43)
 
@@ -64,6 +65,15 @@ df$Franchise <- as_factor(df$Franchise)
 df$Perspective <- as_factor(df$Perspective)
 df$Category <- as_factor(df$Category)
 
+#trim and tidy string variables
+df$Played_On <- trim(df$Played_On)
+df$DLC_Played <- trim(df$DLC_Played)
+df$Publisher <- trim(df$Publisher)
+df$Developer <- trim(df$Developer)
+df$Franchise <- trim(df$Franchise)
+df$Perspective <- trim(df$Perspective)
+df$Category <- trim(df$Category)
+
 #function to group low volume categoricals into other for relevant fields
 group_factor <- function(df, col_name, threshold){
   
@@ -79,15 +89,23 @@ group_factor(df, "Franchise", 3)
 group_factor(df, "Category", 3)
 
 #test and train split
-train_ind <- as_vector(createDataPartition(df$Rating, p = 0.75))
+train <- subset(df, !Play_Year %in% c(2023,2024))
+test <- subset(df, Play_Year %in% c(2023,2024))
 
-train <- df[train_ind, ] #select all rows with the training indexes
-test <- df[-train_ind, ] #select all rows not with the training indexes
+# replace test factors with other if they aren't present
+test$Publisher <- case_when(test$Publisher %in% train$Publisher ~ test$Publisher, .default = "Other")
+test$Franchise <- case_when(test$Franchise %in% train$Franchise ~ test$Franchise, .default = "Other")
+test$Developer <- case_when(test$Developer %in% train$Developer ~ test$Developer, .default = "Other")
+test$Category <- case_when(test$Category %in% train$Category ~ test$Category, .default = "Other")
+
+#Catch all to ensure levels are the same
+test <- rbind(train[1, ], test)
+test <- test[-1, ]
 
 ## First benchmark for just predicting reviewscore ##
 
-cor(test$Rating, test$Reviewscore)^2 #0.4781 R-squared
-sqrt(mean((test$Rating - test$Reviewscore)^2)) #10.789 mean square error
+cor(test$Rating, test$Reviewscore)^2 #0.4227 R-squared
+sqrt(mean((test$Rating - test$Reviewscore)^2)) #13.49137 mean square error
 
 ## first model, linear using basic reviewscore only, for a benchmark ##
 
@@ -96,8 +114,8 @@ summary(model1) # Adjusted R-squared 0.5498 on training data
 
 prediction <- predict(model1, test)
 predict_df1 <- add_column(test, prediction)
-cor(predict_df1$Rating, predict_df1$prediction)^2 # 0.4781 R-squared in test data
-sqrt(mean((predict_df1$Rating - predict_df1$prediction)^2)) #8.922 mean square error
+cor(predict_df1$Rating, predict_df1$prediction)^2 # 0.4227 R-squared in test data
+sqrt(mean((predict_df1$Rating - predict_df1$prediction)^2)) #10.66 mean square error
 
 # R-squared is the same as just using review score as expected, but error is reduced
 # Due to systematic error/ misalignment of means. So this basic model outperforms just using reviewscore mostly due to intercept term
@@ -118,35 +136,25 @@ fmla <- formula(Rating ~ Reviewscore
 model2 <- lm(fmla
              , data = train)
 
-summary(model2) # Adjusted R-squared 0.6535 on training data
-
-# identify any in the test set that were missing from train
-missing_franchise <- setdiff(unique(test$Franchise), unique(train$Franchise))
-# recode the missing as Other
-test <- test %>% mutate(Franchise = fct_recode(Franchise, Other = missing_franchise[1]))
-
-# ensure factor types are matching
-levels(test$Franchise) <- levels(train$Franchise)
-# need to apply the above to all factor variables for deployment to prevent any potential errors
+summary(model2) # Adjusted R-squared 0.6844 on training data
 
 prediction <- predict(model2, test)
 predict_df2 <- add_column(test, prediction)
-cor(predict_df2$Rating, predict_df2$prediction)^2 # 0.4526 R-squared in test data
+cor(predict_df2$Rating, predict_df2$prediction)^2 # 0.4095 R-squared in test data
 # overfitting going on?
 
 ## random forest model ##
-
 numtrees <- 1000
 model3 <- randomForest(fmla
                        , data = train
                        , ntree = numtrees)
   
 # train set r-squared
-mean(model3$rsq) #0.4609 average of trees
+mean(model3$rsq) #0.5118 average of trees
 
 prediction <- predict(model3, test)
 predict_df3 <- add_column(test, prediction)
-cor(predict_df3$Rating, predict_df3$prediction)^2 # 0.4546 R-squared in test data
+cor(predict_df3$Rating, predict_df3$prediction)^2 # 0.3381 R-squared in test data
 residuals <- predict_df3$Rating - predict_df3$prediction
 sqrt(mean(residuals^2)) # rss
 
@@ -187,14 +195,14 @@ y_predicted <- predict(cv.out, s = cv.out$lambda.min, newx = x_matrices$x)
 # training R-squared
 tss <- sum((train$Rating - mean(train$Rating))^2)
 rss <- sum((train$Rating - y_predicted)^2)
-1 - rss/tss # 0.7373 training R-squared
+1 - rss/tss # 0.7487 training R-squared
 
 #test R-squared
 y_predicted <- predict(cv.out, s = cv.out$lambda.min, newx = x_matrices$xtest)
 
 tss <- sum((test$Rating - mean(test$Rating))^2)
 rss <- sum((test$Rating - y_predicted)^2)
-1 - rss/tss # 0.4740 test R-squared
+1 - rss/tss # 0.3824 test R-squared
 sqrt(mean((test$Rating - y_predicted)^2)) # 8.884 mean square error
 
 ## Lasso regression ##
@@ -211,14 +219,14 @@ y_predicted <- predict(cv.out, s = cv.out$lambda.min, newx = x_matrices$x)
 
 tss <- sum((train$Rating - mean(train$Rating))^2)
 rss <- sum((train$Rating - y_predicted)^2)
-1 - rss/tss # 0.6855 training R-squared
+1 - rss/tss # 0.6469 training R-squared
 
 #test R-squared
 y_predicted <- predict(cv.out, s = cv.out$lambda.min, newx = x_matrices$xtest)
 
 tss <- sum((test$Rating - mean(test$Rating))^2)
 rss <- sum((test$Rating - y_predicted)^2)
-1 - rss/tss # 0.5125 test R-squared
+1 - rss/tss # 0.4144 test R-squared
 sqrt(mean((test$Rating - y_predicted)^2)) # 8.552 mean square error
 
 # Lasso better than ridge
@@ -226,7 +234,7 @@ sqrt(mean((test$Rating - y_predicted)^2)) # 8.552 mean square error
 ## Alpha can be set to any number, so is there a sweet spot in the middle? ##
 set.seed(2)
 alphas <- 100
-plot(NULL, xlim = c(0, 1), ylim = c(0.45, 0.55), xlab = "depth", ylab = "test rsq")
+plot(NULL, xlim = c(0, 1), ylim = c(0, 1), xlab = "alpha", ylab = "test rsq")
 for (i in 0:alphas) {
   cv.out <- cv.glmnet(x_matrices$x, train_data$Rating,
                       alpha = i/alphas, nlambda = 100,
@@ -243,18 +251,18 @@ for (i in 0:alphas) {
   print(paste(i/alphas, rsq))
   points(i/alphas, rsq)
 }
-# 0 = ridge regression is the worst but then pretty equal from 0.2 or higher. Go with 0.5
 # alpha between 0 and 1 is elastic net regression
+# Lasso is now the best!
 # convert to using a glmnet regular model once settled #
 
 cv.out <- cv.glmnet(x_matrices$x, train_data$Rating,
-                    alpha = 0.5, nlambda = 100,
+                    alpha = 1, nlambda = 100,
                     lambda.min.ratio = 0.0001)
 
 best_lambda = cv.out$lambda.min
 best_lambda_index <- cv.out$index['min',]
 
-model <- glmnet(x_matrices$x, train_data$Rating, alpha = 0.5, lamda = best_lambda)
+model <- glmnet(x_matrices$x, train_data$Rating, alpha = 1, lamda = best_lambda)
 
 model$beta[, best_lambda_index] #coefficients used in final model
 
@@ -355,7 +363,7 @@ model <- gbm(fmla
             , shrinkage = 0.001
             , cv.folds = 5
 )
-gbm.perf(model, method = "cv") # 6576!
+gbm.perf(model, method = "cv") # 7000!
 
 ## Adjust minobsinnode ##
 
@@ -367,7 +375,7 @@ for (i in min_obs:max_obs) {
   model = gbm(fmla
               , data = train
               , distribution = "gaussian"
-              , n.trees = 6500
+              , n.trees = 7000
               , shrinkage = 0.001
               , n.minobsinnode = i
   )
@@ -379,7 +387,7 @@ for (i in min_obs:max_obs) {
   
 }
 
-# steady downnward slope, with 4 being the peak, makes sense for this low volume data!
+# steady downnward slope, with 5 being the peak, makes sense for this low volume data!
 
 ## Try model again and get scores with the improvements ##
 
@@ -389,7 +397,7 @@ model = gbm(fmla
             , distribution = "gaussian"
             , n.trees = 6500
             , shrinkage = 0.001
-            , n.minobsinnode = 4
+            , n.minobsinnode = 5
 )
 
 summary(model) # relative importances
@@ -434,9 +442,9 @@ for (m in 1:length(features)) {
     model <- gbm(fmla
                 , data = train
                 , distribution = "gaussian"
-                , n.trees = 6500
+                , n.trees = 7000
                 , shrinkage = 0.001
-                , n.minobsinnode = 4
+                , n.minobsinnode = 5
                 )
     prediction <- predict(model, test)
     predict_test <- add_column(test, prediction)
@@ -449,9 +457,24 @@ for (m in 1:length(features)) {
 }
 
 best_fmla <- fmla_vec[[which.max(rsq_vec)]] # find formula which produced best test rsq
-print(best_fmla) #Rating ~ Reviewscore + Franchise + DLC_Played
+print(best_fmla)
 
-#best_fmla <- formula(Rating ~ Reviewscore + Franchise + DLC_Played)
+#best_fmla <- formula(Rating ~ Reviewscore + DLC_Played + Perspective)
+
+set.seed(2)
+model = gbm(best_fmla
+            , data = train
+            , distribution = "gaussian"
+            , n.trees = 7000
+            , shrinkage = 0.001
+            , n.minobsinnode = 5
+            , cv.folds = 5
+)
+
+summary(model) # relative importances
+
+# what is new best ntrees?
+gbm.perf(model, method = "cv") # About 6500!
 
 set.seed(2)
 model = gbm(best_fmla
@@ -459,36 +482,21 @@ model = gbm(best_fmla
             , distribution = "gaussian"
             , n.trees = 6500
             , shrinkage = 0.001
-            , n.minobsinnode = 4
-            , cv.folds = 5
-)
-
-summary(model) # relative importances
-
-# what is new best ntrees?
-gbm.perf(model, method = "cv") # About 5000!
-
-set.seed(2)
-model = gbm(best_fmla
-            , data = train
-            , distribution = "gaussian"
-            , n.trees = 5000
-            , shrinkage = 0.001
-            , n.minobsinnode = 3 #3 now best with best_fmla
+            , n.minobsinnode = 5
 )
 
 summary(model) # relative importances
 
 prediction <- predict(model, train)
 predict_train <- add_column(train, prediction)
-cor(predict_train$Rating, predict_train$prediction)^2 # 0.6955 R-squared in train data
+cor(predict_train$Rating, predict_train$prediction)^2 # 0.6216 R-squared in train data
 
 prediction <- predict(model, test)
 predict_test <- add_column(test, prediction)
-cor(predict_test$Rating, predict_test$prediction)^2 # 0.4922 R-squared in test data
+cor(predict_test$Rating, predict_test$prediction)^2 # 0.4299 R-squared in test data
 
 residuals <- predict_test$Rating - predict_test$prediction
-sqrt(mean(residuals^2)) # mean square error
+sqrt(mean(residuals^2)) # 10.674 mean square error
 
 ## Re-train using full sample for best model ##
 
@@ -497,14 +505,14 @@ sqrt(mean(residuals^2)) # mean square error
 final_model = gbm(best_fmla
                   , data = df
                   , distribution = "gaussian"
-                  , n.trees = 5000
+                  , n.trees = 6500
                   , shrinkage = 0.001
-                  , n.minobsinnode = 3
+                  , n.minobsinnode = 5
 )
 
 prediction <- predict(final_model, df)
 predict <- add_column(df, prediction)
-cor(predict$Rating, predict$prediction)^2 # 0.6098 R-squared in final model (full train data)
+cor(predict$Rating, predict$prediction)^2 # 0.5694 R-squared in final model (full train data)
 
 saveRDS(final_model, file="model.rds")
 saveRDS(df, file="data.rds")
